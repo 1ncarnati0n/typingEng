@@ -52,6 +52,24 @@ pub fn generate_lines(level: &str, chat: bool, topic: &str) -> Result<Vec<Line>,
          8 to 12 lines, one short sentence per line, natural everyday English, plain ASCII punctuation only (no curly quotes, no em dashes).\n\
          For each line give `speaker`, `en` (the English) and `ko` (a natural Korean translation of `en` only)."
     );
+    call_lines(&prompt)
+}
+
+/// 유튜브 자막 조각 → 문장 단위 Line (원문 단어 유지, 구두점 복원, 한국어 번역).
+pub fn lines_from_transcript(chunk: &str) -> Result<Vec<Line>, String> {
+    let prompt = format!(
+        "Below is a raw fragment of an English YouTube transcript (it may lack punctuation and start or end mid-sentence).\n\n\
+         {chunk}\n\n\
+         Turn it into typing practice lines for a Korean learner:\n\
+         - Keep the speaker's words and order. Only restore punctuation and capitalization, and drop filler like \"um\", \"uh\".\n\
+         - One sentence per line; split very long sentences at a comma or conjunction.\n\
+         - Plain ASCII punctuation only (no curly quotes, no em dashes, no music notes).\n\
+         - `speaker` is an empty string. `ko` is a natural Korean translation of `en`."
+    );
+    call_lines(&prompt)
+}
+
+fn call_lines(prompt: &str) -> Result<Vec<Line>, String> {
     let schema = json!({
         "type": "object",
         "properties": {
@@ -69,7 +87,7 @@ pub fn generate_lines(level: &str, chat: bool, topic: &str) -> Result<Vec<Line>,
         "required": ["lines"],
         "additionalProperties": false
     });
-    let out: Lines = call(&prompt, schema)?;
+    let out: Lines = call(prompt, schema)?;
     if out.lines.is_empty() {
         return Err("빈 결과가 왔습니다. 다시 시도하세요.".into());
     }

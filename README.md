@@ -26,6 +26,12 @@
    - Claude가 교정문, 틀린 부분별 설명(`원래 표현 → 고친 표현 + 이유`), 격려 피드백을 줍니다.
    - 원문은 "모범 답안"으로 함께 보여줍니다. 원문과 똑같이 쓰지 않아도 자연스럽고 맞는 영어면 인정합니다.
 
+### 유튜브로 연습하기
+설정 화면에 유튜브 링크를 넣고 **자막 가져오기**를 누르면, 영상의 영어 자막(수동 자막 우선, 없으면 자동 자막)을 받아 약 10줄씩 나눕니다.
+Claude가 각 세트의 구두점을 복원하고 문장별 한국어 뜻을 붙여주면, 위와 같은 따라치기 → 직접 쓰기 흐름으로 진행됩니다.
+따라치기 화면의 **▶ 영상 m:ss부터** 버튼을 누르면 기본 브라우저에서 지금 세트가 시작하는 시각부터 영상이 열립니다. 앱 창 옆에 띄워 두고 보면서 따라 치세요.
+직접 쓰기 화면의 **다음 10줄** 버튼으로 영상 끝까지 이어서 연습할 수 있습니다.
+
 누적 줄 수, 최고 WPM, **자주 틀린 단어**는 저장되어 첫 화면에 보입니다.
 
 ---
@@ -38,6 +44,10 @@
   ```bash
   claude   # 처음 한 번 실행해서 로그인
   ```
+- (유튜브 기능을 쓸 때) [yt-dlp](https://github.com/yt-dlp/yt-dlp)
+  ```bash
+  brew install yt-dlp
+  ```
 
 ### 실행
 ```bash
@@ -49,7 +59,7 @@ cargo run --release
 ### 테스트
 ```bash
 cargo test                 # 타이핑 로직 단위 테스트 (사용량 없음)
-cargo test -- --ignored    # 실제 claude CLI를 불러 문장 생성 확인 (Claude 사용량 소모)
+cargo test -- --ignored    # 실제 claude CLI / yt-dlp 호출 확인 (Claude 사용량·네트워크 사용)
 ```
 
 ---
@@ -71,7 +81,8 @@ cargo test -- --ignored    # 실제 claude CLI를 불러 문장 생성 확인 (C
 ```
 src/
 ├── main.rs     iced 앱: 상태, 메시지, 화면 3개(설정 / 따라치기 / 쓰기), 통계 저장
-├── claude.rs   Claude CLI 호출: generate_lines(), review_writing()
+├── claude.rs   Claude CLI 호출: generate_lines(), lines_from_transcript(), review_writing()
+├── youtube.rs  yt-dlp로 영어 자막 받기, VTT → 평문, 10줄 분량으로 나누기 + 단위 테스트
 └── typing.rs   순수 로직: 글자별 정오 판정, WPM, 틀린 단어 추출 + 단위 테스트
 ```
 

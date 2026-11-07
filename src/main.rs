@@ -1,5 +1,6 @@
 mod claude;
 mod typing;
+mod youtube;
 
 use claude::{Line, Review};
 use iced::widget::{
@@ -68,6 +69,10 @@ struct App {
     review: Option<Review>,
     busy: bool,
     error: Option<String>,
+    yt_url: String,
+    yt_id: String,
+    yt_chunks: Vec<youtube::Chunk>,
+    yt_pos: usize,
 }
 
 #[derive(Debug, Clone)]
@@ -83,6 +88,11 @@ enum Msg {
     AskReview,
     Reviewed(Result<Review, String>),
     Home,
+    YtUrl(String),
+    YtLoad,
+    YtLoaded(Result<(String, Vec<youtube::Chunk>), String>),
+    NextChunk,
+    OpenVideo,
 }
 
 /// claude CLI 호출은 블로킹이라 별도 스레드에서 돌리고 결과만 future로 받는다.
@@ -113,6 +123,10 @@ impl App {
             review: None,
             busy: false,
             error: None,
+            yt_url: String::new(),
+            yt_id: String::new(),
+            yt_chunks: vec![],
+            yt_pos: 0,
         }
     }
 
@@ -124,6 +138,7 @@ impl App {
             Msg::Generate => {
                 self.busy = true;
                 self.error = None;
+                self.yt_chunks.clear();
                 let (level, chat, topic) = (self.level, self.chat, self.topic.clone());
                 return Task::perform(
                     off_thread(move || claude::generate_lines(level, chat, &topic)),
@@ -144,7 +159,11 @@ impl App {
                         self.screen = Screen::Typing;
                         return operation::focus(INPUT_ID);
                     }
-                    Err(e) => self.error = Some(e),
+                    Err(e) => {
+                        // 유튜브 세트 변환이 실패하면 같은 세트를 다시 시도할 수 있게 되돌린다
+                        self.yt_pos = self.yt_pos.saturating_sub(1);
+                        self.error = Some(e);
+                    }
                 }
             }
             Msg::Typed(s) => {
@@ -175,6 +194,48 @@ impl App {
                     Err(e) => self.error = Some(e),
                 }
             }
+            Msg::YtUrl(u) => self.yt_url = u,
+            Msg::YtLoad => {
+                self.busy = true;
+                self.error = None;
+                let url = self.yt_url.clone();
+                return Task::perform(
+                    off_thread(move || {
+                        youtube::fetch_transcript(&url).map(|(id, segs)| (id, youtube::chunks(&segs, youtube::CHUNK_WORDS)))
+                    }),
+                    Msg::YtLoaded,
+                );
+            }
+            Msg::YtLoaded(res) => match res {
+                Ok((id, chunks)) => {
+                    self.yt_id = id;
+                    self.yt_chunks = chunks;
+                    self.yt_pos = 0;
+                    return self.update(Msg::NextChunk);
+                }
+                Err(e) => {
+                    self.busy = false;
+                    self.error = Some(e);
+                }
+            },
+            Msg::NextChunk => {
+                let Some(chunk) = self.yt_chunks.get(self.yt_pos).map(|c| c.text.clone()) else {
+                    self.busy = false;
+                    return Task::none();
+                };
+                self.busy = true;
+                self.error = None;
+                self.yt_pos += 1;
+                return Task::perform(off_thread(move || claude::lines_from_transcript(&chunk)), Msg::Generated);
+            }
+            Msg::OpenVideo => {
+                if let Some(c) = self.current_chunk() {
+                    if let Err(e) = youtube::open_in_browser(&youtube::watch_url(&self.yt_id, c.start)) {
+                        self.error = Some(e);
+                    }
+                }
+                return operation::focus(INPUT_ID);
+            }
             Msg::Home => {
                 self.screen = Screen::Setup;
                 self.error = None;
@@ -200,6 +261,11 @@ impl App {
             self.screen = Screen::Writing;
         }
         self.stats.save();
+    }
+
+    /// 지금 치고 있는 유튜브 세트 (yt_pos는 다음 세트를 가리킨다).
+    fn current_chunk(&self) -> Option<&youtube::Chunk> {
+        self.yt_pos.checked_sub(1).and_then(|i| self.yt_chunks.get(i))
     }
 
     fn wpm(&self) -> f64 {
@@ -266,10 +332,27 @@ impl App {
         ]
         .spacing(6);
 
+        let yt = column![
+            text("유튜브로 연습").size(13).color(MUTED),
+            row![
+                text_input("https://www.youtube.com/watch?v=…", &self.yt_url)
+                    .on_input(Msg::YtUrl)
+                    .on_submit_maybe((!self.busy).then_some(Msg::YtLoad))
+                    .padding(10),
+                button(text(if self.busy { "가져오는 중…" } else { "자막 가져오기" }))
+                    .on_press_maybe((!self.busy && !self.yt_url.trim().is_empty()).then_some(Msg::YtLoad))
+                    .padding([10, 18]),
+            ]
+            .spacing(8),
+            text("영어 자막을 10줄씩 따라 치고 영작합니다 (yt-dlp 필요)").size(13).color(MUTED),
+        ]
+        .spacing(8);
+
         column![
             text("typingEng").size(34).color(ACCENT),
             text("쉬운 영어를 따라 치고, 직접 써보세요").color(MUTED),
             card(form),
+            card(yt),
             card(record),
         ]
         .spacing(16)
@@ -323,6 +406,11 @@ impl App {
             row![
                 text(format!("{} / {}", self.idx + 1, self.lines.len())).color(MUTED),
                 iced::widget::space::horizontal(),
+                self.current_chunk().map(|c| {
+                    button(text(format!("▶ 영상 {}:{:02}부터", c.start / 60, c.start % 60)).size(13))
+                        .style(button::text)
+                        .on_press(Msg::OpenVideo)
+                }),
                 button(text("그만하기").size(13)).style(button::text).on_press(Msg::Home),
             ]
             .align_y(Center),
@@ -361,13 +449,20 @@ impl App {
             .padding(12);
 
         let can = !self.busy && !self.editor.text().trim().is_empty();
-        let actions = row![
-            button(text(if self.busy { "첨삭 중…" } else { "첨삭 받기" }))
+        let mut actions = row![
+            button(text(if self.busy { "처리 중…" } else { "첨삭 받기" }))
                 .on_press_maybe(can.then_some(Msg::AskReview))
                 .padding([10, 24]),
-            button(text("새 문장")).style(button::secondary).on_press(Msg::Home).padding([10, 24]),
         ]
         .spacing(10);
+        if self.yt_pos < self.yt_chunks.len() {
+            actions = actions.push(
+                button(text(format!("다음 10줄 ({}/{})", self.yt_pos + 1, self.yt_chunks.len())))
+                    .on_press_maybe((!self.busy).then_some(Msg::NextChunk))
+                    .padding([10, 24]),
+            );
+        }
+        actions = actions.push(button(text("새 문장")).style(button::secondary).on_press(Msg::Home).padding([10, 24]));
 
         let mut page = column![
             summary,
