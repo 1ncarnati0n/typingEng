@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="referrer" content="strict-origin-when-cross-origin">
+<title>typingEng 플레이어</title>
+<style>
+  :root { color-scheme: dark; }
+  html, body { margin: 0; height: 100%; background: #1a1b26; color: #c0caf5; font: 15px -apple-system, system-ui, sans-serif; }
+  body { display: flex; flex-direction: column; }
+  #wrap { flex: 1; position: relative; }
+  #p { position: absolute; inset: 0; width: 100%; height: 100%; }
+  #bar { padding: 10px 16px; display: flex; gap: 12px; align-items: center; border-top: 1px solid #292e42; }
+  #dot { width: 9px; height: 9px; border-radius: 50%; background: #565f89; }
+  #dot.on { background: #9ece6a; }
+  #msg { color: #737aa2; }
+  #gate { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; flex-direction: column;
+          gap: 14px; background: rgba(26, 27, 38, .92); z-index: 2; }
+  #gate button { font: inherit; font-size: 18px; padding: 14px 32px; border: 0; border-radius: 10px;
+                 background: #7aa2f7; color: #1a1b26; cursor: pointer; }
+  #gate p { margin: 0; color: #737aa2; }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div id="p"></div>
+  <div id="gate">
+    <button id="go">▶ 클릭해서 연결</button>
+    <p>브라우저 자동재생 제한 때문에 처음 한 번만 눌러 주세요. 이후에는 앱에서 문장마다 재생합니다.</p>
+  </div>
+</div>
+<div id="bar"><span id="dot"></span><span id="msg">연결 대기 중…</span></div>
+<script>
+  let player = null, ready = false, unlocked = false, seq = -1, cur = null, pending = null;
+  // 지금 구간. armed: 재생 위치가 실제로 구간 안에 들어온 뒤에만 끝에서 멈춘다 (seek 직전의 옛 위치로 오작동 방지)
+  let seg = null, armed = false, rate = 1;
+  const msg = (t) => document.getElementById('msg').textContent = t;
+
+  window.onYouTubeIframeAPIReady = () => {
+    player = new YT.Player('p', {
+      width: '100%', height: '100%',
+      playerVars: { playsinline: 1, rel: 0, modestbranding: 1, cc_load_policy: 0, origin: location.origin },
+      events: {
+        onReady: () => { ready = true; msg('준비됨 — 앱에서 문장을 시작하세요'); flush(); },
+        onStateChange: (e) => { if (e.data === YT.PlayerState.PLAYING) player.setPlaybackRate(rate); },
+        onError: (e) => msg([101, 150, 153].includes(e.data)
+          ? '이 영상은 다른 사이트에서 재생(임베드)이 막혀 있습니다. 다른 영상을 써 주세요.'
+          : '재생 오류 (' + e.data + ')'),
+      },
+    });
+  };
+  const s = document.createElement('script');
+  s.src = 'https://www.youtube.com/iframe_api';
+  document.head.appendChild(s);
+
+  document.getElementById('go').onclick = () => {
+    unlocked = true;
+    document.getElementById('gate').remove();
+    document.getElementById('dot').classList.add('on');
+    flush();
+  };
+
+  function flush() {
+    if (!ready || !unlocked || !pending) return;
+    const c = pending; pending = null;
+    seg = { start: c.start, end: c.end };
+    armed = false;
+    rate = c.rate || 1;
+    player.setPlaybackRate(rate);
+    if (c.id !== cur) {
+      cur = c.id;
+      player.loadVideoById({ videoId: c.id, startSeconds: c.start });
+    } else {
+      player.seekTo(c.start, true);
+      player.playVideo();
+    }
+    msg('재생 중 ' + fmt(c.start) + ' – ' + fmt(c.end));
+  }
+  const fmt = (t) => Math.floor(t / 60) + ':' + String(Math.floor(t % 60)).padStart(2, '0');
+
+  setInterval(async () => {
+    try {
+      const c = await (await fetch('/cmd', { cache: 'no-store' })).json();
+      if (c.seq !== seq && c.seq > 0) { seq = c.seq; pending = c; flush(); }
+    } catch (_) { msg('앱과 연결이 끊어졌습니다. 앱을 다시 켜고 플레이어를 다시 여세요.'); }
+  }, 200);
+
+  // 문장 끝에서 멈춤
+  setInterval(() => {
+    if (!seg || !player || !player.getCurrentTime) return;
+    const t = player.getCurrentTime();
+    if (!armed && t >= seg.start - 0.5 && t < seg.end) armed = true;
+    if (armed && t >= seg.end) {
+      player.pauseVideo();
+      seg = null;
+      msg('멈춤 — 앱에서 따라 치세요');
+    }
+  }, 50);
+</script>
+</body>
+</html>

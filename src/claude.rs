@@ -13,6 +13,11 @@ pub struct Line {
     pub speaker: String,
     pub en: String,
     pub ko: String,
+    /// 유튜브 세트일 때 영상 구간(초). Claude 응답에는 없고 youtube::align이 채운다.
+    #[serde(default)]
+    pub start: f64,
+    #[serde(default)]
+    pub end: f64,
 }
 
 impl Line {
@@ -61,7 +66,7 @@ pub fn lines_from_transcript(chunk: &str) -> Result<Vec<Line>, String> {
         "Below is a raw fragment of an English YouTube transcript (it may lack punctuation and start or end mid-sentence).\n\n\
          {chunk}\n\n\
          Turn it into typing practice lines for a Korean learner:\n\
-         - Keep the speaker's words and order. Only restore punctuation and capitalization, and drop filler like \"um\", \"uh\".\n\
+         - Keep the speaker's words in the same order. Only restore punctuation and capitalization; you may drop filler like \"um\", \"uh\". Do not reorder, summarize or add words.\n\
          - One sentence per line; split very long sentences at a comma or conjunction.\n\
          - Plain ASCII punctuation only (no curly quotes, no em dashes, no music notes).\n\
          - `speaker` is an empty string. `ko` is a natural Korean translation of `en`."
