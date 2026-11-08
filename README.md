@@ -3,7 +3,7 @@
 **따라 치면서 익히고, 직접 써보면서 내 것으로 만드는 영어 학습 앱**
 
 쉬운 영어 소설이나 채팅 대화를 한 줄씩 따라 타이핑하면서 표현을 손에 익히고, 이어서 한국어 뜻만 보고 같은 내용을 영어로 직접 써본 뒤 AI 첨삭을 받는 데스크톱 앱입니다.
-문장 생성과 첨삭은 로그인된 **Claude Code CLI**가 맡기 때문에 API 키가 필요 없습니다.
+문장 생성과 첨삭은 로그인된 **Claude Code CLI**(최신 Haiku) 또는 **Codex CLI**(최신 Terra)가 맡기 때문에 API 키가 필요 없습니다. 첫 화면 **AI 엔진**에서 고르고, 실제 모델 이름은 상태줄에 표시됩니다.
 
 ---
 
@@ -56,9 +56,10 @@
 
 ### 준비물
 - Rust (edition 2024, 1.85 이상)
-- [Claude Code](https://claude.com/claude-code) CLI 설치 및 로그인
+- 둘 중 하나 이상 설치 및 로그인
   ```bash
-  claude   # 처음 한 번 실행해서 로그인
+  claude        # Claude Code CLI — 처음 한 번 실행해서 로그인
+  codex login   # Codex CLI
   ```
 - (유튜브 기능을 쓸 때) [yt-dlp](https://github.com/yt-dlp/yt-dlp)
   ```bash
@@ -85,8 +86,8 @@ cargo test -- --ignored    # 실제 claude CLI / yt-dlp 호출 확인 (Claude �
 | 영역 | 사용 기술 |
 |---|---|
 | 언어 | Rust (edition 2024) |
-| GUI | [iced](https://iced.rs) 0.14 — Elm 아키텍처(State / Message / update / view), TokyoNight 테마 |
-| AI | Claude Code CLI (`claude -p`) + JSON Schema 구조화 출력 |
+| GUI | [iced](https://iced.rs) 0.14 — Elm 아키텍처(State / Message / update / view), 시스템 라이트/다크를 따르는 iamWriter 톤 팔레트 |
+| AI | Claude Code CLI (`claude -p --model haiku`) 또는 Codex CLI (`codex exec -m <최신 terra> --output-schema`) + JSON Schema 구조화 출력 |
 | 직렬화 | serde, serde_json |
 | 저장 | `~/.typing_eng.json` (통계), `~/.typing_eng_library.json` (보관함) |
 | 영상 | yt-dlp(자막), YouTube IFrame API(브라우저 재생) — 앱 ↔ 브라우저는 std `TcpListener` |
@@ -101,7 +102,7 @@ src/
 ├── store.rs    통계·보관함 JSON 저장 (임시 파일에 쓰고 rename)
 ├── player.rs   127.0.0.1 미니 HTTP 서버 — 브라우저 플레이어에 "구간 재생" 명령 전달
 ├── player.html YouTube IFrame API 플레이어 페이지 (구간 끝에서 자동 멈춤)
-├── claude.rs   Claude CLI 호출: generate_lines(), lines_from_transcript(), review_writing()
+├── claude.rs   Claude / Codex CLI 호출(Engine): generate_lines(), lines_from_transcript(), review_writing()
 ├── youtube.rs  yt-dlp로 영어 자막 받기, VTT → 단어별 시각, 세트 나누기, 문장↔영상 구간 맞추기 + 테스트
 └── typing.rs   순수 로직: 글자별 정오 판정, WPM, 틀린 단어 추출 + 단위 테스트
 ```

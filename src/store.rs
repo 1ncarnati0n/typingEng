@@ -1,5 +1,5 @@
 // 홈 폴더 JSON 파일에 저장: 통계(~/.typing_eng.json), 보관함(~/.typing_eng_library.json)
-use crate::claude::Line;
+use crate::claude::{Engine, Line};
 use crate::youtube::Chunk;
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use std::collections::HashMap;
@@ -30,6 +30,14 @@ pub struct Stats {
     /// 설정: 유튜브 자막을 받을 때 Chrome 로그인 쿠키를 쓰지 않음 (기본은 사용)
     #[serde(default)]
     pub no_yt_cookies: bool,
+    /// 설정: 따라치기(영문) 글꼴, 뜻(한글) 글꼴. None = 기본값
+    #[serde(default)]
+    pub en_font: Option<String>,
+    #[serde(default)]
+    pub ko_font: Option<String>,
+    /// 설정: 문장 생성·정리·첨삭에 쓸 CLI
+    #[serde(default)]
+    pub engine: Engine,
 }
 
 impl Stats {

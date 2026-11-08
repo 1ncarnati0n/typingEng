@@ -412,7 +412,7 @@ mod tests {
         let t = fetch_transcript("https://www.youtube.com/watch?v=arj7oStGLkU", false).unwrap();
         assert!(t.words.windows(2).all(|w| w[0].0 <= w[1].0), "단어 시각이 거꾸로 감");
         let cs = chunks(&t.words, t.end, CHUNK_WORDS);
-        let mut lines = crate::claude::lines_from_transcript(&cs[0].text()).unwrap();
+        let mut lines = crate::claude::lines_from_transcript(crate::claude::Engine::Claude, &cs[0].text()).unwrap();
         align(&cs[0], &mut lines);
         for l in &lines {
             eprintln!("{:6.2}-{:6.2} {}", l.start, l.end, l.en);
